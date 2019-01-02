@@ -1,101 +1,119 @@
 --https://social.msdn.microsoft.com/Forums/sqlserver/en-US/e7056ca8-94cd-4d36-a676-04c64bf96330/decrypt-the-encrypted-store-procedure-through-the-tsql-programming-in-sql-server-2005?forum=transactsql
 --http://jongurgul.com/blog/sql-object-decryption/
-DECLARE @EncObj VARBINARY(MAX),@DummyEncObj VARBINARY(MAX),@ObjectNameStmTemplate NVARCHAR(MAX)
-SET NOCOUNT ON
-/*
---You must be using a DAC.
-SELECT * FROM sys.dm_exec_connections ec JOIN sys.endpoints e
-on (ec.[endpoint_id]=e.[endpoint_id])
-WHERE e.[name]='Dedicated Admin Connection'
-AND ec.[session_id] = @@SPID
-*/
-USE [master] --change to where your encrypted object resides
-DECLARE @object_id INT,@name sysname
-SELECT @object_id = [object_id],@name = [name]
-FROM sys.all_objects
-WHERE name = N'jjj' --<=Either put your object name here or make sure @object_id is set, and that the object it relates to is encrypted.
+DECLARE @EncObj VARBINARY(MAX),@DummyEncObj VARBINARY(MAX),@ObjectNameType NVARCHAR(50),@ObjectNameStmTemplate NVARCHAR(4000),@Schema nVARCHAR(MAX),@ObjectName NVARCHAR(50),@TemplateObj NVARCHAR(max)
+DECLARE @p INT,@p1 NVARCHAR(MAX),@p2 NVARCHAR(MAX),@QueryForDummyObj NVARCHAR(MAX),@C INT
+	
+SET @ObjectName = 'jjj'
+SET @Schema = 'dbo'
 
-SELECT TOP 1
- @ObjectNameStmTemplate = [ObjectStmTemplate]
-,@EncObj = [imageval]
-FROM
+IF EXISTS 
 (
-SELECT
-SPACE(1)+
-(
-CASE WHEN [type] = 'P' THEN N'PROCEDURE'
-WHEN [type] = 'V' THEN 'VIEW'
-WHEN [type] IN ('FN','TF','IF') THEN N'FUNCTION'
-WHEN [type] IN ('TR') THEN N'TRIGGER'
-ELSE [type]
-END
+SELECT 1 FROM syscomments WHERE [encrypted]=1 AND [id]= OBJECT_ID(@Schema+'.'+@ObjectName)
 )
-+SPACE(1)+QUOTENAME(SCHEMA_NAME([schema_id]))+'.'+QUOTENAME(ao.[name])+SPACE(1)+
-(
-CASE WHEN [type] = 'P' THEN N'WITH ENCRYPTION AS'
-WHEN [type] = 'V' THEN N'WITH ENCRYPTION AS SELECT 123 ABC'
-WHEN [type] IN ('FN') THEN N'() RETURNS INT WITH ENCRYPTION AS BEGIN RETURN 1 END'
-WHEN [type] IN ('TF') THEN N'() RETURNS @t TABLE(i INT) WITH ENCRYPTION AS BEGIN RETURN END'
-WHEN [type] IN ('IF') THEN N'() RETURNS TABLE WITH ENCRYPTION AS RETURN SELECT 1 N'
-WHEN [type] IN ('TR') THEN N' ON ' + OBJECT_NAME(ao.[parent_object_id]) + ' WITH ENCRYPTION FOR DELETE AS SELECT 1 N'
-ELSE [type]
-END
-) +REPLICATE(CAST(N'-' AS NVARCHAR(MAX)),DATALENGTH(sov.[imageval])) COLLATE DATABASE_DEFAULT
-,sov.[imageval]
-FROM sys.all_objects ao
-INNER JOIN sys.sysobjvalues sov ON sov.[valclass] = 1 AND ao.[Object_id] = sov.[objid]
-WHERE [type] NOT IN ('S','U','PK','F','D','SQ','IT','X','PC','FS','AF','TR') AND ao.[object_id] = @object_id
-UNION ALL
---Server Triggers
-SELECT SPACE(1)+'TRIGGER'+SPACE(1)+QUOTENAME(st.[name])+SPACE(1)+N'ON ALL SERVER WITH ENCRYPTION FOR DDL_LOGIN_EVENTS AS SELECT 1'
- +REPLICATE(CAST(N'-' AS NVARCHAR(MAX)),DATALENGTH(sov.[imageval])) COLLATE DATABASE_DEFAULT
-,sov.[imageval]
-FROM sys.server_triggers st
-INNER JOIN sys.sysobjvalues sov ON sov.[valclass] = 1 AND st.[object_id] = sov.[objid] WHERE st.[object_id] = @object_id
---Database Triggers
-UNION ALL
-SELECT SPACE(1)+'TRIGGER'+SPACE(1)+QUOTENAME(dt.[name])+SPACE(1)+N'ON DATABASE WITH ENCRYPTION FOR CREATE_TABLE AS SELECT 1'
- +REPLICATE(CAST(N'-' AS NVARCHAR(MAX)),DATALENGTH(sov.[imageval])) COLLATE DATABASE_DEFAULT
-,sov.[imageval]
-FROM sys.triggers dt
-INNER JOIN sys.sysobjvalues sov ON sov.[valclass] = 1 AND dt.[object_id] = sov.[objid] AND dt.[parent_class_desc] = 'DATABASE' WHERE dt.[object_id] = @object_id
-) x([ObjectStmTemplate],[imageval])
-
---Alter the existing object, then revert so that we have the dummy object encrypted value
-BEGIN TRANSACTION
-	DECLARE @sql NVARCHAR(MAX)
-	SET @sql = N'ALTER'+@ObjectNameStmTemplate
-	EXEC sp_executesql @sql
-	SELECT @DummyEncObj = sov.[imageval]
-	FROM sys.all_objects ao
-	INNER JOIN sys.sysobjvalues sov ON sov.[valclass]=1 AND ao.[Object_id]=sov.[objid]
-	WHERE ao.[object_id] = @object_id
-ROLLBACK TRANSACTION
-
-DECLARE @Final NVARCHAR(MAX)
-SET @Final = N''
-DECLARE @Pos INT
-SET @Pos = 1
-WHILE @Pos <= DATALENGTH(@EncObj)/2
 BEGIN
-	SET @Final = @Final + NCHAR(UNICODE(SUBSTRING(CAST(@EncObj AS NVARCHAR(MAX)),@Pos,1))^(UNICODE(SUBSTRING(N'CREATE'+@ObjectNameStmTemplate COLLATE DATABASE_DEFAULT,@Pos,1))^UNICODE(SUBSTRING(CAST(@DummyEncObj AS NVARCHAR(MAX)),@Pos,1))))
-	SET @Pos = @Pos + 1
-END
+	IF EXISTS 
+	(
+	SELECT * FROM sys.dm_exec_connections ec JOIN sys.endpoints e 
+	on (ec.[endpoint_id]=e.[endpoint_id]) 
+	WHERE e.[name]='Dedicated Admin Connection' 
+	AND ec.[session_id] = @@SPID
+	)
+	BEGIN
+		SELECT TOP 1 @ObjectName=ObjectName,@ObjectNameType=ObjectType,@ObjectNameStmTemplate=ObjectStmTemplate,@EncObj = [imageval]
+		FROM
+		(
+		SELECT name ObjectName,
+		CASE WHEN [type] = 'P' THEN N'PROCEDURE' 
+		WHEN [type] = 'V' THEN 'VIEW' 
+		WHEN [type] IN ('FN','TF','IF') THEN N'FUNCTION' 
+		ELSE [type]
+		END ObjectType,
+		CASE WHEN [type] = 'P' THEN N'WITH ENCRYPTION AS' 
+		WHEN [type] = 'V' THEN N'WITH ENCRYPTION AS SELECT 123 ABC' 
+		WHEN [type] IN ('FN') THEN  N'() RETURNS INT WITH ENCRYPTION AS BEGIN RETURN 1 END' 
+		WHEN [type] IN ('TF') THEN  N'() RETURNS @t TABLE(i INT) WITH ENCRYPTION AS BEGIN RETURN END'
+		WHEN [type] IN ('IF') THEN  N'() RETURNS TABLE WITH ENCRYPTION AS RETURN SELECT 1 N' 
+		ELSE [type]
+		END ObjectStmTemplate,
+		sov.[imageval]
+		FROM sys.all_objects ao 
+		INNER JOIN sys.sysobjvalues sov ON sov.[valclass] = 1 AND ao.[Object_id] = sov.[objid]
+		WHERE [type] NOT IN ('S','U','PK','F','D','SQ','IT','X','PC','FS','AF') 
+		and ao.[name] = @ObjectName
+		and ao.[schema_id] = SCHEMA_ID(@Schema)
+		--UNION ALL SELECT object_id,name,'TRIGGER',N'ON ALL SERVER WITH ENCRYPTION FOR DDL_LOGIN_EVENTS AS SELECT 1' FROM sys.server_triggers WHERE name = @ObjectName 
+		--UNION ALL SELECT object_id,name,'TRIGGER',N'ON DATABASE WITH ENCRYPTION FOR CREATE_TABLE AS SELECT 1' FROM sys.triggers WHERE name = @ObjectName
+		) x
 
---If the object is small then just print, else print in chunks
-IF DATALENGTH(@Final) <= 8000
-BEGIN
-	PRINT '--SMALL--'
-	PRINT @Final
+		--Chunks
+		SET @C = CEILING(DATALENGTH(@EncObj) / 8000.0)
+
+		--Alter the existing object, then revert so that we have the dummy object encrypted value
+		BEGIN TRANSACTION
+			SET @p = 1
+			SET @p1= N'ALTER'+SPACE(1)+@ObjectNameType+SPACE(1)+ISNULL((@Schema+'.'),'')+@ObjectName +SPACE(1)+@ObjectNameStmTemplate;	
+			SET @p1=@p1+REPLICATE('-',4000-LEN(@p1))			
+			SET @p2 = REPLICATE('-',4000)
+			SET @QueryForDummyObj = N'EXEC(@p1'
+				WHILE @p<=@C
+				BEGIN
+					SET @QueryForDummyObj=@QueryForDummyObj+N'+@f'
+					SET @p =@p +1
+				END
+			SET @QueryForDummyObj=@QueryForDummyObj+')'				
+			EXEC sp_executesql @QueryForDummyObj,N'@p1 NVARCHAR(4000),@f VARCHAR(8000)',@p1=@p1,@f=@p2
+
+			SELECT @DummyEncObj = sov.[imageval]
+			FROM sys.all_objects ao 
+			INNER JOIN sys.sysobjvalues sov ON sov.[valclass]=1 AND ao.[Object_id]=sov.[objid]
+			WHERE ao.[name]=@ObjectName AND ao.[schema_id]=SCHEMA_ID(@Schema)
+			
+		ROLLBACK TRANSACTION
+
+		--Replacement Text
+		SET @TemplateObj = N'CREATE'+SPACE(1)+@ObjectNameType+SPACE(1)+ISNULL((@Schema+'.'),'')+@ObjectName +SPACE(1)+@ObjectNameStmTemplate+REPLICATE('-',4000)	
+		DECLARE @i INT
+		SET @i = 1
+		WHILE @i<@C
+		BEGIN
+			SET @TemplateObj=@TemplateObj+REPLICATE(N'-',4000)
+			SET @i =@i+1
+		END
+
+		----Simple Char Decrypt
+		--DECLARE @Pos INT
+		--SET @Pos=1
+		--WHILE @Pos<=DATALENGTH(@EncObj)/2
+		--BEGIN
+		--PRINT NCHAR(UNICODE(SUBSTRING(CAST(x AS NVARCHAR(MAX)),@Pos,1))^(UNICODE(SUBSTRING(@TemplateObj,@Pos,1))^UNICODE(SUBSTRING(CAST(@DummyEncObj AS NVARCHAR(MAX)),@Pos,1))))			
+		--SET @Pos=@Pos+1
+		--END	
+
+		----8000 Char Decrypt Strings
+		DECLARE @CNumber INT,@CEncObj NVARCHAR(MAX),@CDummyEnc NVARCHAR(MAX),@CPiece NVARCHAR(MAX),@CPosition INT,@CTemplateObj NVARCHAR(MAX)
+		SET @CNumber=1
+		WHILE @CNumber<=@C
+		BEGIN		
+			SELECT @CEncObj=SUBSTRING(@EncObj,(@CNumber-1)*8000+1,8000)
+			SELECT @CDummyEnc=SUBSTRING(@DummyEncObj,(@CNumber - 1) * 8000+1,8000)
+			SELECT @CTemplateObj=SUBSTRING(@TemplateObj,0+((@CNumber-1)*4000),4000)	
+			SET @CPiece=REPLICATE(N'-',(DATALENGTH(@CEncObj)/2))					
+			SET @CPosition=1
+			WHILE @CPosition<=DATALENGTH(@CEncObj)/2
+				BEGIN
+				SET @CPiece=STUFF(@CPiece,@CPosition,1,NCHAR(UNICODE(SUBSTRING(@CEncObj,@CPosition,1))^(UNICODE(SUBSTRING(@CTemplateObj,@CPosition,1))^UNICODE(SUBSTRING(@CDummyEnc,@CPosition,1)))))
+				SET @CPosition=@CPosition+1
+				END
+			PRINT @CPiece
+			SET @CNumber=@CNumber+1
+		END		
+	END
+	ELSE
+	BEGIN
+		PRINT 'Use a DAC Connection'
+	END
 END
 ELSE
 BEGIN
-	PRINT '--BIG--'
-	DECLARE @c INT
-	SET @c = 0
-	WHILE @c <= (DATALENGTH(@Final)/8000)
-	BEGIN
-		PRINT SUBSTRING(@Final,1+(@c*4000),4000)
-		SET @c = @c + 1
-	END
+	PRINT 'Object not encrypted or not found'
 END
