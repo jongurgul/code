@@ -9,8 +9,8 @@ on (ec.[endpoint_id]=e.[endpoint_id])
 WHERE e.[name]='Dedicated Admin Connection'
 AND ec.[session_id] = @@SPID
 */
-
-DECLARE @object_id INT,@name SYSNAME
+USE [master] --change to where your encrypted object resides
+DECLARE @object_id INT,@name sysname
 SELECT @object_id = [object_id],@name = [name] 
 FROM sys.all_objects 
 WHERE name = N'jjj' --<=Either put your object name here or make sure @object_id is set, and that the object it relates to is encrypted.
@@ -92,7 +92,7 @@ ELSE
 BEGIN
 	PRINT '--BIG--'
 	DECLARE @c INT
-	SET @c = 1
+	SET @c = 0
 	WHILE @c <= (DATALENGTH(@Final)/8000)
 	BEGIN
 		PRINT SUBSTRING(@Final,@c+(@c*4000),4000)
