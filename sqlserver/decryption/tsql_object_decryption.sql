@@ -95,7 +95,7 @@ BEGIN
 	SET @c = 0
 	WHILE @c <= (DATALENGTH(@Final)/8000)
 	BEGIN
-		PRINT SUBSTRING(@Final,@c+(@c*4000),4000)
+		PRINT SUBSTRING(@Final,1+(@c*4000),4000)
 		SET @c = @c + 1
 	END
 END
