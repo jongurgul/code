@@ -11,11 +11,11 @@ AND ec.[session_id] = @@SPID
 */
 USE [master] --change to where your encrypted object resides
 DECLARE @object_id INT,@name sysname
-SELECT @object_id = [object_id],@name = [name] 
-FROM sys.all_objects 
+SELECT @object_id = [object_id],@name = [name]
+FROM sys.all_objects
 WHERE name = N'jjj' --<=Either put your object name here or make sure @object_id is set, and that the object it relates to is encrypted.
 
-SELECT TOP 1 
+SELECT TOP 1
  @ObjectNameStmTemplate = [ObjectStmTemplate]
 ,@EncObj = [imageval]
 FROM
@@ -49,14 +49,14 @@ UNION ALL
 --Server Triggers
 SELECT SPACE(1)+'TRIGGER'+SPACE(1)+QUOTENAME(st.[name])+SPACE(1)+N'ON ALL SERVER WITH ENCRYPTION FOR DDL_LOGIN_EVENTS AS SELECT 1'
  +REPLICATE(CAST(N'-' AS NVARCHAR(MAX)),DATALENGTH(sov.[imageval])) COLLATE DATABASE_DEFAULT
-,sov.[imageval] 
+,sov.[imageval]
 FROM sys.server_triggers st
 INNER JOIN sys.sysobjvalues sov ON sov.[valclass] = 1 AND st.[object_id] = sov.[objid] WHERE st.[object_id] = @object_id
 --Database Triggers
 UNION ALL
 SELECT SPACE(1)+'TRIGGER'+SPACE(1)+QUOTENAME(dt.[name])+SPACE(1)+N'ON DATABASE WITH ENCRYPTION FOR CREATE_TABLE AS SELECT 1'
  +REPLICATE(CAST(N'-' AS NVARCHAR(MAX)),DATALENGTH(sov.[imageval])) COLLATE DATABASE_DEFAULT
-,sov.[imageval] 
+,sov.[imageval]
 FROM sys.triggers dt
 INNER JOIN sys.sysobjvalues sov ON sov.[valclass] = 1 AND dt.[object_id] = sov.[objid] AND dt.[parent_class_desc] = 'DATABASE' WHERE dt.[object_id] = @object_id
 ) x([ObjectStmTemplate],[imageval])
@@ -78,7 +78,7 @@ DECLARE @Pos INT
 SET @Pos = 1
 WHILE @Pos <= DATALENGTH(@EncObj)/2
 BEGIN
-	SET @Final = @Final + NCHAR(UNICODE(SUBSTRING(CAST(@EncObj AS NVARCHAR(MAX)),@Pos,1))^(UNICODE(SUBSTRING(N'CREATE'+@ObjectNameStmTemplate,@Pos,1))^UNICODE(SUBSTRING(CAST(@DummyEncObj AS NVARCHAR(MAX)),@Pos,1))))
+	SET @Final = @Final + NCHAR(UNICODE(SUBSTRING(CAST(@EncObj AS NVARCHAR(MAX)),@Pos,1))^(UNICODE(SUBSTRING(N'CREATE'+@ObjectNameStmTemplate COLLATE DATABASE_DEFAULT,@Pos,1))^UNICODE(SUBSTRING(CAST(@DummyEncObj AS NVARCHAR(MAX)),@Pos,1))))
 	SET @Pos = @Pos + 1
 END
 
