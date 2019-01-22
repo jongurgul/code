@@ -32,7 +32,7 @@ Function Get-InstalledSoftware {
     ForEach ($ComputerName in $Computers) {
         $Registry = $Null;
         Try {$Registry = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey([Microsoft.Win32.RegistryHive]::LocalMachine, $ComputerName); }
-        Catch {Write-Host -ForegroundColor Red "$($_.Exception.Message)"; }
+        Catch {Write-Output "$($_.Exception.Message)"; }
 
         If ($Registry) {
             $UninstallKeys = $Null;
