@@ -5,16 +5,16 @@ Function Get-InstalledSoftware {
 .DESCRIPTION
 	Get-InstalledSoftware
 .NOTES
-    
+
 	Author: Jon Gurgul
 	License: AGPL-3.0-only
 .LINK
     http://jongurgul.com/blog/installedsoftware/
 .PARAMETER Computers
 	Computers
-.EXAMPLE	
+.EXAMPLE
 	Get-InstalledSoftware | Sort-Object @{Expression={$_.ComputerName};Ascending=$True},@{Expression={$_.Name};Ascending=$True}
-    
+
     Sorts results.
 #>
     Param([String[]]$Computers)
@@ -38,7 +38,7 @@ Function Get-InstalledSoftware {
             $UninstallKeys = $Null;
             $SubKey = $Null;
             $UninstallKeys = $Registry.OpenSubKey("Software\Microsoft\Windows\CurrentVersion\Uninstall", $False);
-            $UninstallKeys.GetSubKeyNames()| % {
+            $UninstallKeys.GetSubKeyNames()| ForEach-Object {
                 $SubKey = $UninstallKeys.OpenSubKey($_, $False);
                 $DisplayName = $SubKey.GetValue("DisplayName");
                 If ($DisplayName.Length -gt 0) {
@@ -61,7 +61,7 @@ Function Get-InstalledSoftware {
                 $SubKeyWow6432Node = $Null;
                 $UninstallKeysWow6432Node = $Registry.OpenSubKey("Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall", $False);
                 If ($UninstallKeysWow6432Node) {
-                    $UninstallKeysWow6432Node.GetSubKeyNames()| % {
+                    $UninstallKeysWow6432Node.GetSubKeyNames()| ForEach-Object {
                         $SubKeyWow6432Node = $UninstallKeysWow6432Node.OpenSubKey($_, $False);
                         $DisplayName = $SubKeyWow6432Node.GetValue("DisplayName");
                         If ($DisplayName.Length -gt 0) {

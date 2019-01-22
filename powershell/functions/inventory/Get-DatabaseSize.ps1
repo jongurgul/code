@@ -1,22 +1,22 @@
 If (!(Get-Module SqlServer)) {Import-Module SqlServer};
 
-Function Get-DatabaseSizes([String] $SQLInstanceName = $Env:COMPUTERNAME) {
+Function Get-DatabaseSize([String] $SQLInstanceName = $Env:COMPUTERNAME) {
     <#
 .SYNOPSIS
-    Get-DatabaseSizes
+    Get-DatabaseSize
 .DESCRIPTION
-	Get-DatabaseSizes
+	Get-DatabaseSize
 .NOTES
-    
+
 	Author: Jon Gurgul
 	License: AGPL-3.0-only
 .LINK
-    http://jongurgul.com/blog/get-databasesizes/
+    http://jongurgul.com/blog/Get-DatabaseSizes/
 .PARAMETER SQLInstanceName
 	SQLInstanceName
 .EXAMPLE
-	Get-DatabaseSizes . | Where-Object {$_.DatabaseName -like "m*"}
-    
+	Get-DatabaseSize . | Where-Object {$_.DatabaseName -like "m*"}
+
     Wild card search.
 #>
     $SQLInstance = New-Object "Microsoft.SqlServer.Management.Smo.Server" $SQLInstanceName;

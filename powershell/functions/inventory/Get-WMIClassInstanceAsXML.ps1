@@ -7,7 +7,7 @@ Function Get-WMIClassInstanceAsXML($Path = "root\cimv2", $Class = "Win32_Process
 .DESCRIPTION
 	Get-WMIClassInstanceAsXML
 .NOTES
-    
+
 	Author: Jon Gurgul
 	License: AGPL-3.0-only
 .LINK
@@ -18,7 +18,7 @@ Function Get-WMIClassInstanceAsXML($Path = "root\cimv2", $Class = "Win32_Process
     Class
 .PARAMETER Computer
 	Computer
-.EXAMPLE	
+.EXAMPLE
 	Get-WMIClassInstanceAsXML "root\cimv2" "Win32_Printer" "ComputerA"
     .
     Returns printers.
@@ -32,8 +32,8 @@ Function Get-WMIClassInstanceAsXML($Path = "root\cimv2", $Class = "Win32_Process
     $ManagementClass = New-Object System.Management.ManagementClass($ManagementScope, $ManagementPath, $ObjectGetOptions);
 
     [Void]$StringBuilder.Append("<$Class>");
-    $ManagementClass.PSBase.GetInstances()| % {
-        $_.PSBase.Properties| % {
+    $ManagementClass.PSBase.GetInstances()| ForEach-Object {
+        $_.PSBase.Properties| ForEach-Object {
             If ($_.Value) {[Void]$StringBuilder.Append("<$($_.Name)>$([System.Web.HttpUtility]::HtmlEncode($_.Value).Replace([Char]0x1F, ' '))</$($_.Name)>")}
         }
     }
